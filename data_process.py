@@ -1,4 +1,4 @@
-#-*- coding:utf-8 -*-
+#coding:utf8
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
 import nltk

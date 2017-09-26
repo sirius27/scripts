@@ -1,13 +1,20 @@
 #-*- coding:utf-8 -*-
 import argparse
 import os
+import tqdm
+
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
+import torch as t
+
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from gensim.models.doc2vec import Doc2Vec
-from MultiCNNTextDeep
+from MultiCNNTextDeep import MultiCNN
+from torch import optim, nn
+
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('model_path',type=str,help='model file path')
@@ -60,31 +67,56 @@ def get_count_vector(cv_path):
 	return train_cv, test_cv
 
 def train(train_data, train_labels):
-
-	#首先用lgb训练
-	print 'training gbm'
-	lgb_train = lgb.Dataset(train_data,train_labels)
+    #首先用lgb训练
+    print 'training gbm'
+    lgb_train = lgb.Dataset(train_data,train_labels)
 	#lgb_eval = lgb.Dataset(X_test, y_test, reference=lgb_train)
 	# specify your configurations as a dict
-	params = {'task': 'train','boosting_type': 'gbdt','application': 'multiclass','metric': {'multi_logloss'},\
+    params = {'task': 'train','boosting_type': 'gbdt','application': 'multiclass','metric': {'multi_logloss'},\
 		  'num_leaves': 31,'learning_rate': 0.05,'feature_fraction': 0.9,'bagging_fraction': 0.8,\
 		  'bagging_freq': 5,'verbose': 0, 'num_class':9}
-	print 'Start training...'
+    print 'Start training...'
 	#训练.暂时没有验证集
-	gbm = lgb.train(params, lgb_train, num_boost_round=20, valid_sets=None)
+    gbm = lgb.train(params, lgb_train, num_boost_round=20, valid_sets=None)
 	#其次用logistic regression
-	print 'training linear regression'
-	clf_lr = LogisticRegression()
-	clf_lr.fit(train_data, train_labels)
+    print 'training linear regression'
+    clf_lr = LogisticRegression()
+    clf_lr.fit(train_data, train_labels)
 	#然后用svm
-	print 'training svm'
-	clf_svm = SVC(probability = True)
-	clf_svm.fit(train_data, train_labels)
-	#最后用cnn
+    print 'training svm'
+    clf_svm = SVC(probability = True)
+    clf_svm.fit(train_data, train_labels)
+    #最后用cnn
 	print 'training cnn'
 	cnn = MultiCNNDeepText()
-	cnn.fit(_train_data, train_labels)
-	return gbm, clf_lr, clf_svm
+    t = tqdm.trange(0, args.nb_epoch, desc='cnn')
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(cnn.parameters(), lr = args.learning_rate)
+    best_loss = -1
+    for i in t:
+        running_loss = 0
+        for batch_start in range(0, train_X.shape[0], args.batch_size):
+            loss.zero_grad()
+            batch_end = batch_end + args.batch_size
+
+            input_X = Variable(train_X[batch_start:batch_end,:].from_numpy())
+            real_y = Variable(train_y[batch_start:batch_end].from_numpy())
+
+            output = cnn(input_X)
+            batch_loss = criterion(output, real_y)
+            running_loss += batch_loss.data.numpy()
+            loss.backward()
+            optimizer.step()
+        if best_loss < 0:
+            best_loss = running_loss
+        elif running_loss < best_loss:
+            best_loss = running_loss
+	        state_dict = {'epoch':epoch+1,'state_dict':model.state_dict(),'best_mse':best_prec1,'optimizer':optimizer.state_dict()}
+            current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+            t.save(state_dict, '../models/'+current_time+'_checkpoint.pth')
+        t.set_description('mse = %.6f' % running_loss)
+
+    return gbm, clf_lr, clf_svm
 
 def one_hot_encode(y, nb_classes):
 	y_pred = [np.argmax(i) for i in y]
